@@ -4,14 +4,19 @@
 #include <ctime>
 #include <chrono>
 
+// Entry struct declaration outside of the CuckooSerialHashSet class
+struct Entry {
+    const int val;
+    Entry(int val) : val(val) {}
+};
+
 template <class T>
 class CuckooSerialHashSet {
-
     // Wrapper class for entries to allow for nullptr to be the default
-    struct Entry {
-        const T val;
-        Entry(T val) : val(val) {}
-    };
+    // struct Entry {
+    //     const T val;
+    //     Entry(T val) : val(val) {}
+    // };
 
     int limit;
     size_t salt0;
@@ -24,7 +29,7 @@ class CuckooSerialHashSet {
     template <class D>
     inline void hash_combine(std::size_t& seed, const D& v) {
         std::hash<D> hasher;
-        seed ^= hasher(v) + 0x9e3779b9 + (seed<<6) + (seed>>2);
+        seed ^= hasher(v) + 0x9e3779b9 + (seed << 6) + (seed >> 2);
     }
 
     int hash0(const T val) {
@@ -71,7 +76,7 @@ class CuckooSerialHashSet {
             [&] {
                 for (auto row : old_table) {
                     for (auto entry : row) {
-                        if (entry != nullptr && !add(entry->val)) {
+                        if (entry != nullptr && !add(entry)) {
                             done = false;
                             table = old_table;
                             return;
@@ -92,28 +97,8 @@ class CuckooSerialHashSet {
         return true;
     }
 
-    /** 
-     * Adds val
-     * return: true if add was successful
-     */
-    bool add(const Entry *value) {
-    if (contains(value->val)) {
-        return false;
-    }
-    for (int i = 0; i < limit; i++) {
-        if ((value = swap(0, hash0(value->val), value)) == nullptr) {
-            return true;
-        } else if ((value = swap(1, hash1(value->val), value)) == nullptr) {
-            return true;
-        }
-    }
-    if (!resize())
-        return false;
-    return add(value->val); // Add return statement here
-    }   
-
 public:
-    CuckooSerialHashSet(int capacity) : capacity(capacity), limit(capacity/2) {
+    CuckooSerialHashSet(int capacity) : capacity(capacity), limit(capacity / 2) {
         for (int i = 0; i < 2; i++) {
             std::vector<Entry*> row;
             row.assign(capacity, nullptr);
@@ -140,33 +125,33 @@ public:
      * Swaps the element at table[table_index][index] with val.
      * return: The old val
      */
-    Entry* swap(const int table_index, const int index, Entry *val) {
-        Entry *swap_val = table[table_index][index];
+    Entry* swap(const int table_index, const int index, Entry* val) {
+        Entry* swap_val = table[table_index][index];
         table[table_index][index] = val;
         return swap_val;
     }
 
-    /** 
+    /**
      * Adds val
      * return: true if add was successful
      */
-    bool add(const Entry *value) {
-    if (contains(value->val)) {
-        return false;
-    }
-    for (int i = 0; i < limit; i++) {
-        if ((value = swap(0, hash0(value->val), value)) == nullptr) {
-            return true;
-        } else if ((value = swap(1, hash1(value->val), value)) == nullptr) {
-            return true;
+    bool add(Entry* value) {
+        if (contains(value->val)) {
+            return false;
         }
-    }
-    if (!resize())
-        return false;
-    return add(value->val);
+        for (int i = 0; i < limit; i++) {
+            if ((value = swap(0, hash0(value->val), value)) == nullptr) {
+                return true;
+            } else if ((value = swap(1, hash1(value->val), value)) == nullptr) {
+                return true;
+            }
+        }
+        if (!resize())
+            return false;
+        return add(value);
     }
 
-    /** 
+    /**
      * Removes val
      * return: true if remove was successful
      */
@@ -185,7 +170,7 @@ public:
         return false;
     }
 
-    /** 
+    /**
      * Checks if the table contains val
      * return: true if the table contains val
      */
@@ -222,8 +207,10 @@ public:
      */
     bool populate(const std::vector<T> entries) {
         for (T entry : entries) {
-            if (!add(entry)) {
+            Entry* new_entry = new Entry(entry);
+            if (!add(new_entry)) {
                 std::cout << "Duplicate entry attempted for populate!" << std::endl;
+                delete new_entry;
                 return false;
             }
         }
@@ -245,7 +232,9 @@ int main() {
     // Test adding elements and measure execution time
     auto start_time = std::chrono::high_resolution_clock::now();
     for (int i = 0; i < 1000; ++i) {
-        hash_set.add(rand() % 1000);
+        int rand_val = rand() % 1000;
+        Entry* entry = new Entry(rand_val); // Create Entry object dynamically
+        hash_set.add(entry); // Pass the entry pointer
     }
     auto end_time = std::chrono::high_resolution_clock::now();
     std::chrono::duration<double, std::milli> add_time = end_time - start_time;
