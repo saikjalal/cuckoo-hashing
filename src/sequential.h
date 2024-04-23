@@ -4,16 +4,25 @@
 #include <ctime>
 
 template <class T>
-class CuckooSerialHashSet {
+class Sequential {
+
     struct Entry {
         const T val;
         Entry(T val) : val(val) {}
     };
 
     int LIMIT;
+    // limit that is randomized. this is used to prevent an infinite loop
+    // limit maximum number of attempts to relocate an
+    // entry during an insertion operation before triggering a resize of the hash set
     int capacity;
     bool resizing = false;
     std::vector<std::vector<Entry*>> table;
+
+/*
+   I used the standard hash function std::hash
+   Source: https://en.cppreference.com/w/cpp/utility/hash
+*/
 
     int hashZero(const T val) {
         return std::hash<T>{}(val) % capacity;
@@ -28,45 +37,44 @@ class CuckooSerialHashSet {
             return false;
         }
         resizing = true;
-        bool done;
-        std::vector<std::vector<Entry*>> old_table;
-        do {
-            done = true;
-            capacity *= 2;
-            LIMIT *= 2;
-            old_table = table;
-            table.clear();
-            for (int i = 0; i < 2; i++) {
-                std::vector<Entry*> row;
-                row.assign(capacity, nullptr);
-                table.push_back(row);
-            }
+        
+        int new_capacity = capacity * 2; // Double the capacity
+        int new_limit = new_capacity / 2; // Update the limit
 
-            for (auto row : old_table) {
-                for (auto entry : row) {
-                    if (entry != nullptr && !add(entry->val)) {
-                        done = false;
-                        table = old_table;
-                        resizing = false; // Reset resizing flag if resizing fails
-                        return false;
+        // Create a new table with the doubled capacity
+        std::vector<std::vector<Entry*>> new_table(2, std::vector<Entry*>(new_capacity, nullptr));
+
+        // Move elements from the old table to the new table
+        for (auto& row : table) {
+            for (auto& entry : row) {
+                if (entry != nullptr) {
+                    int hash_index = hashZero(entry->val) % new_capacity; // Get the new hash index
+                    if (new_table[0][hash_index] == nullptr) {
+                        new_table[0][hash_index] = entry;
+                    } else {
+                        hash_index = hashOne(entry->val) % new_capacity; // Use the second hash function if collision
+                        if (new_table[1][hash_index] == nullptr) {
+                            new_table[1][hash_index] = entry;
+                        } else {
+                            resizing = false;
+                            return false; // Unable to add entry to new table
+                        }
                     }
                 }
             }
-        } while (!done);
-        for (auto row : old_table) {
-            for (auto entry : row) {
-                if (entry != nullptr)
-                    delete entry;
-            }
-            row.clear();
         }
-        old_table.clear();
+
+        // swap the old and new table
+        table.swap(new_table);
+        capacity = new_capacity;
+        LIMIT = new_limit;
+
         resizing = false;
         return true;
     }
 
 public:
-    CuckooSerialHashSet(int capacity) : capacity(capacity), LIMIT(capacity / 2) {
+    Sequential(int capacity) : capacity(capacity), LIMIT(capacity / 2) {
         for (int i = 0; i < 2; i++) {
             std::vector<Entry*> row;
             row.assign(capacity, nullptr);
@@ -74,7 +82,7 @@ public:
         }
     }
 
-    ~CuckooSerialHashSet() {
+    ~Sequential() {
         for (auto row : table) {
             for (auto entry : row) {
                 if (entry != nullptr) {
@@ -150,7 +158,6 @@ public:
     bool populate(const std::vector<T> entries) {
         for (T entry : entries) {
             if (!add(entry)) {
-                std::cout << "Duplicate entry attempted for populate!" << std::endl;
                 return false;
             }
         }
