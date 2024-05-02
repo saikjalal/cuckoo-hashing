@@ -1,4 +1,5 @@
-# This defaults bits to 64, but allows it to be overridden on the command line
+# This defaults bits to 64, but allows it to be overridden on the command
+# line
 BITS = 64
 
 # Output directory
@@ -8,13 +9,13 @@ tmp  := $(shell mkdir -p $(ODIR))
 # Basic compiler configuration and flags
 CXX      = g++
 CXXFLAGS = -MMD -ggdb -O3 -std=gnu++17 -m$(BITS)
-LDFLAGS  = -m$(BITS) -lpthread -lrt
+LDFLAGS	 = -m$(BITS) -lpthread -lrt
 
 # The basenames of the c++ files that this program uses
-CXXFILES = sequential
+CXXFILES = test
 
 # The executable we will build
-TARGET = $(ODIR)/sequential
+TARGET = $(ODIR)/test
 
 # Create the .o names from the CXXFILES
 OFILES = $(patsubst %, $(ODIR)/%.o, $(CXXFILES))
@@ -46,4 +47,5 @@ $(TARGET): $(OFILES)
 
 # Pull in all dependencies
 -include $(DFILES)
+
 

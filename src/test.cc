@@ -10,10 +10,10 @@
 #include "sequential.h"
 #include "concurrent.h"
 
-const int NUM_OPS = 10000000;
-const int CAPACITY = 15000;
-const int KEY_MAX = 10000;
-const int INITIAL_SIZE = KEY_MAX/2;
+const int NUM_OPS = 15000000;
+const int CAPACITY = 12000;
+const int KEY_MAX = 1500;
+const int INITIAL_SIZE = KEY_MAX / 2;
 const int NUM_THREADS = 8;
 
 struct Operation {
@@ -43,24 +43,22 @@ std::vector<int> generate_entries(int num_entries) {
     return {entries.begin(), entries.end()};
 }
 
-std::vector<Operation> generate_operations(int num_ops, std::vector<int> *entries) {
-    // 50% contains, 25% add, 25% remove
-    // With guarenteed success for add and remove operations, size of table should stay
-    // relatively the same.
+std::vector<Operation> generate_operations(int num_ops, std::vector<int>* entries) {
+    // 80% contains, 10% add, 10% remove
     auto seed = std::chrono::high_resolution_clock::now()
             .time_since_epoch()
             .count();
     static thread_local std::mt19937 generator(seed);
-    std::uniform_int_distribution<int> distribution_percentage(0, 100);
+    std::uniform_int_distribution<int> distribution_percentage(1, 100);
     std::uniform_int_distribution<int> distribution_entries(0, KEY_MAX);
     std::vector<Operation> ops;
     for (int i = 0; i < num_ops; i++) {
-        std::uniform_int_distribution<int> distribution_existing_entries(0, entries->size()-1);
+        std::uniform_int_distribution<int> distribution_existing_entries(0, entries->size() - 1);
         int which_op = distribution_percentage(generator);
-        if (which_op <= 50) {
+        if (which_op <= 80) {
             // contains
             ops.emplace_back(distribution_entries(generator), 0);
-        } else if (which_op <= 75) {
+        } else if (which_op <= 90) {
             // add
             int entry = distribution_entries(generator);
             entries->push_back(entry);
@@ -76,7 +74,7 @@ std::vector<Operation> generate_operations(int num_ops, std::vector<int> *entrie
 /**
  * Runs a workload for cuckoo serial
  */
-long long do_work_serial(CuckooSerialHashSet<int> *cuckoo_serial, std::vector<Operation> ops) {
+long long do_work_serial(Sequential<int> *cuckoo_serial, std::vector<Operation> ops) {
     // Start doing work
     auto exec_time_start = std::chrono::high_resolution_clock::now();
     for (auto op : ops) {
@@ -129,7 +127,7 @@ long long do_work_concurrent(CuckooConcurrentHashSet<int> *cuckoo_concurrent, st
 int main(int argc, char *argv[]) {
     // Serial Cuckoo
     std::cout << "Starting serial cuckoo..." << std::endl;
-    CuckooSerialHashSet<int> *cuckoo_serial = new CuckooSerialHashSet<int>(CAPACITY);
+    Sequential<int> *cuckoo_serial = new Sequential<int>(CAPACITY);
     // Setup hash table and pre-generate workload
     auto serial_entries = generate_entries(INITIAL_SIZE);
     if (!cuckoo_serial->populate(serial_entries))
