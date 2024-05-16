@@ -5,152 +5,170 @@
 
 template <class T>
 class Sequential {
-
-    //I just made a struct to check if a value would check
+    // Structure to represent each entry in the hash table
     struct Entry {
-        bool occupied; // false == empty true == occupied
-        T val;
+        bool occupied; // Indicates if the entry is occupied (true) or empty (false)
+        T val;         // The value stored in the entry
         Entry() : occupied(false) {} 
         Entry(T val) : val(val), occupied(true) {} 
     };
 
-    int LIMIT;
-    // limit that is randomized. this is used to prevent an infinite loop
-    // limit maximum number of attempts to relocate an
-    // entry during an insertion operation before triggering a resize of the hash set
-    int capacity;
+    int relocation_limit; 
+    int table_capacity;  
     bool resizing = false;
-    std::vector<std::vector<Entry>> table;
+    std::vector<std::vector<Entry*>> buckets; 
 
-    //for the first hash table
-    // standard hash function
-    int hashZero(const T val) {
-        return std::hash<T>{}(val) % capacity;
+    // Primary hash function
+    int hashPrimary(const T val) {
+        return std::hash<T>{}(val) % table_capacity;
     }
 
-    //for the second hash table 
-    //standard hash function
-    int hashOne(const T val) {
-        return std::hash<T>{}(val) % capacity;
+    // Secondary hash function
+    int hashSecondary(const T val) {
+        return std::hash<T>{}(val) % table_capacity;
     }
 
+    // function to resize the hash table
     bool resize() {
         if (resizing) {
             return false;
         }
         resizing = true;
         
-        int new_capacity = capacity * 2; // we can double the capacity if we need to resize
-        int new_limit = new_capacity / 2; // the limit would need to be updated
+        int new_capacity = table_capacity * 2; // double the capacity
+        int new_relocation_limit = new_capacity / 2; // update the relocation limit
 
-        // this creates a new table
-        std::vector<std::vector<Entry>> new_table(2, std::vector<Entry>(new_capacity));
+        // create a new table with increased capacity
+        std::vector<std::vector<Entry*>> new_buckets(2, std::vector<Entry*>(new_capacity, nullptr));
 
-        
-        for (auto& row : table) {
-            for (auto& entry : row) {
-                if (entry.occupied) {
-                    int hash_index = hashZero(entry.val) % new_capacity; // Get the new hash index
-                    if (!new_table[0][hash_index].occupied) {
-                        new_table[0][hash_index] = entry;
+        // rehash all entries from the old table to the new table
+        for (auto& bucket_row : buckets) {
+            for (auto& entry : bucket_row) {
+                if (entry != nullptr && entry->occupied) {
+                    int new_index = hashPrimary(entry->val) % new_capacity; // get the new hash index
+                    if (new_buckets[0][new_index] == nullptr) {
+                        new_buckets[0][new_index] = entry; // place the entry in the new table
                     } else {
-                        hash_index = hashOne(entry.val) % new_capacity; // Use the second hash function if collision
-                        if (!new_table[1][hash_index].occupied) {
-                            new_table[1][hash_index] = entry;
+                        new_index = hashSecondary(entry->val) % new_capacity; // use the secondary hash function if collision
+                        if (new_buckets[1][new_index] == nullptr) {
+                            new_buckets[1][new_index] = entry; // place the entry in the new table
                         } else {
                             resizing = false;
-                            return false; // Unable to add entry to new table
+                            return false; // unable to add entry to the new table
                         }
                     }
                 }
             }
         }
 
-        // performs a swap
-        table.swap(new_table);
-        capacity = new_capacity;
-        LIMIT = new_limit;
+        for (auto& bucket_row : buckets) {
+            for (auto& entry : bucket_row) {
+                if (entry != nullptr) {
+                    delete entry;
+                }
+            }
+        }
+
+        // perform a swap
+        buckets.swap(new_buckets);
+        table_capacity = new_capacity;
+        relocation_limit = new_relocation_limit;
 
         resizing = false;
         return true;
     }
 
 public:
-    Sequential(int capacity) : capacity(capacity), LIMIT(capacity / 2) {
+    // Constructor
+    Sequential(int initial_capacity) : table_capacity(initial_capacity), relocation_limit(initial_capacity / 2) {
         for (int i = 0; i < 2; i++) {
-            std::vector<Entry> row(capacity); 
-            table.push_back(row);
+            std::vector<Entry*> bucket_row(initial_capacity, nullptr);
+            buckets.push_back(bucket_row);
         }
     }
 
+    // Destructor
     ~Sequential() {
-        // no dynamic allocation for entries
+        for (auto& bucket_row : buckets) {
+            for (auto& entry : bucket_row) {
+                delete entry; // Deallocate each entry
+            }
+        }
     }
 
+    // function add
     bool add(const T val) {
         if (contains(val)) {
-            return false;
+            return false; // value already exists
         }
-        Entry value(val); 
-        for (int i = 0; i < LIMIT; i++) {
-            int index = hashZero(value.val) % capacity;
-            if (!table[0][index].occupied) { // Check if the slot is unoccupied
-                table[0][index] = value; // Assign the value to the slot
+        Entry* new_entry = new Entry(val);
+        for (int i = 0; i < relocation_limit; i++) {
+            int index = hashPrimary(new_entry->val) % table_capacity;
+            if (buckets[0][index] == nullptr || !buckets[0][index]->occupied) {
+                if (buckets[0][index] != nullptr) delete buckets[0][index];
+                buckets[0][index] = new_entry; // Place in primary bucket 
                 return true;
             }
-            index = hashOne(value.val) % capacity;
-            if (!table[1][index].occupied) { // check if it is an unoccpied
-                table[1][index] = value; 
+            index = hashSecondary(new_entry->val) % table_capacity;
+            if (buckets[1][index] == nullptr || !buckets[1][index]->occupied) {
+                if (buckets[1][index] != nullptr) delete buckets[1][index];
+                buckets[1][index] = new_entry; // place in secondary bucket if cant in primary or first bucket
                 return true;
             }
         }
-        if (!resize())
-            return false;
-        return add(value.val);
+        if (!resize()) {
+            delete new_entry;
+            return false; // resize failed
+        }
+        return add(new_entry->val); // retry
     }
 
+    // function to remove a value from the hash table
     bool remove(const T val) {
-        int index0 = hashZero(val);
-        int index1 = hashOne(val);
-        if (table[0][index0].occupied && table[0][index0].val == val) {
-            table[0][index0].occupied = false; // this will mark the entry as occupied
+        int index_primary = hashPrimary(val);
+        int index_secondary = hashSecondary(val);
+        if (buckets[0][index_primary] != nullptr && buckets[0][index_primary]->occupied && buckets[0][index_primary]->val == val) {
+            buckets[0][index_primary]->occupied = false; // unoccupied
             return true;
-        } else if (table[1][index1].occupied && table[1][index1].val == val) {
-            table[1][index1].occupied = false; // this means it isn't occupied
+        } else if (buckets[1][index_secondary] != nullptr && buckets[1][index_secondary]->occupied && buckets[1][index_secondary]->val == val) {
+            buckets[1][index_secondary]->occupied = false; // unoccupied
             return true;
         }
         return false;
     }
 
+    // function to check if a value exists in the hash table
     bool contains(const T val) {
-        int index0 = hashZero(val);
-        int index1 = hashOne(val);
-        if (table[0][index0].occupied && table[0][index0].val == val) {
+        int index_primary = hashPrimary(val);
+        int index_secondary = hashSecondary(val);
+        if (buckets[0][index_primary] != nullptr && buckets[0][index_primary]->occupied && buckets[0][index_primary]->val == val) {
             return true;
-        } else if (table[1][index1].occupied && table[1][index1].val == val) {
+        } else if (buckets[1][index_secondary] != nullptr && buckets[1][index_secondary]->occupied && buckets[1][index_secondary]->val == val) {
             return true;
         }
         return false;
     }
 
+    // function to get the number of elements in the hash table
     int size() {
-        int size = 0;
-        for (auto row : table) {
-            for (auto entry : row) {
-                if (entry.occupied) {
-                    size++;
+        int count = 0;
+        for (auto& bucket_row : buckets) {
+            for (auto& entry : bucket_row) {
+                if (entry != nullptr && entry->occupied) {
+                    count++;
                 }
             }
         }
-        return size;
+        return count;
     }
 
+    // function populate
     bool populate(const std::vector<T> entries) {
-        for (T entry : entries) {
+        for (const T& entry : entries) {
             if (!add(entry)) {
-                return false;
+                return false; // return false if cant
             }
         }
-        return true;
+        return true; // return true if the entries have been added successfully
     }
 };
