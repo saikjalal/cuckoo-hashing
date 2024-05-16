@@ -6,9 +6,12 @@
 template <class T>
 class Sequential {
 
+    //I just made a struct to check if a value would check
     struct Entry {
-        const T val;
-        Entry(T val) : val(val) {}
+        bool occupied; // false == empty true == occupied
+        T val;
+        Entry() : occupied(false) {} 
+        Entry(T val) : val(val), occupied(true) {} 
     };
 
     int LIMIT;
@@ -17,17 +20,16 @@ class Sequential {
     // entry during an insertion operation before triggering a resize of the hash set
     int capacity;
     bool resizing = false;
-    std::vector<std::vector<Entry*>> table;
+    std::vector<std::vector<Entry>> table;
 
-/*
-   I used the standard hash function std::hash
-   Source: https://en.cppreference.com/w/cpp/utility/hash
-*/
-
+    //for the first hash table
+    // standard hash function
     int hashZero(const T val) {
         return std::hash<T>{}(val) % capacity;
     }
 
+    //for the second hash table 
+    //standard hash function
     int hashOne(const T val) {
         return std::hash<T>{}(val) % capacity;
     }
@@ -38,22 +40,22 @@ class Sequential {
         }
         resizing = true;
         
-        int new_capacity = capacity * 2; // Double the capacity
-        int new_limit = new_capacity / 2; // Update the limit
+        int new_capacity = capacity * 2; // we can double the capacity if we need to resize
+        int new_limit = new_capacity / 2; // the limit would need to be updated
 
-        // Create a new table with the doubled capacity
-        std::vector<std::vector<Entry*>> new_table(2, std::vector<Entry*>(new_capacity, nullptr));
+        // this creates a new table
+        std::vector<std::vector<Entry>> new_table(2, std::vector<Entry>(new_capacity));
 
-        // Move elements from the old table to the new table
+        
         for (auto& row : table) {
             for (auto& entry : row) {
-                if (entry != nullptr) {
-                    int hash_index = hashZero(entry->val) % new_capacity; // Get the new hash index
-                    if (new_table[0][hash_index] == nullptr) {
+                if (entry.occupied) {
+                    int hash_index = hashZero(entry.val) % new_capacity; // Get the new hash index
+                    if (!new_table[0][hash_index].occupied) {
                         new_table[0][hash_index] = entry;
                     } else {
-                        hash_index = hashOne(entry->val) % new_capacity; // Use the second hash function if collision
-                        if (new_table[1][hash_index] == nullptr) {
+                        hash_index = hashOne(entry.val) % new_capacity; // Use the second hash function if collision
+                        if (!new_table[1][hash_index].occupied) {
                             new_table[1][hash_index] = entry;
                         } else {
                             resizing = false;
@@ -64,7 +66,7 @@ class Sequential {
             }
         }
 
-        // swap the old and new table
+        // performs a swap
         table.swap(new_table);
         capacity = new_capacity;
         LIMIT = new_limit;
@@ -76,57 +78,45 @@ class Sequential {
 public:
     Sequential(int capacity) : capacity(capacity), LIMIT(capacity / 2) {
         for (int i = 0; i < 2; i++) {
-            std::vector<Entry*> row;
-            row.assign(capacity, nullptr);
+            std::vector<Entry> row(capacity); 
             table.push_back(row);
         }
     }
 
     ~Sequential() {
-        for (auto row : table) {
-            for (auto entry : row) {
-                if (entry != nullptr) {
-                    delete entry;
-                }
-            }
-            row.clear();
-        }
-        table.clear();
-    }
-
-    Entry* swap(const int table_index, const int index, Entry *val) {
-        Entry *swap_val = table[table_index][index];
-        table[table_index][index] = val;
-        return swap_val;
+        // no dynamic allocation for entries
     }
 
     bool add(const T val) {
         if (contains(val)) {
             return false;
         }
-        Entry *value = new Entry(val);
+        Entry value(val); 
         for (int i = 0; i < LIMIT; i++) {
-            if ((value = swap(0, hashZero(value->val), value)) == nullptr) {
+            int index = hashZero(value.val) % capacity;
+            if (!table[0][index].occupied) { // Check if the slot is unoccupied
+                table[0][index] = value; // Assign the value to the slot
                 return true;
-            } else if ((value = swap(1, hashOne(value->val), value)) == nullptr) {
+            }
+            index = hashOne(value.val) % capacity;
+            if (!table[1][index].occupied) { // check if it is an unoccpied
+                table[1][index] = value; 
                 return true;
             }
         }
         if (!resize())
             return false;
-        return add(value->val);
+        return add(value.val);
     }
 
     bool remove(const T val) {
         int index0 = hashZero(val);
         int index1 = hashOne(val);
-        if (table[0][index0] != nullptr && table[0][index0]->val == val) {
-            delete table[0][index0];
-            table[0][index0] = nullptr;
+        if (table[0][index0].occupied && table[0][index0].val == val) {
+            table[0][index0].occupied = false; // this will mark the entry as occupied
             return true;
-        } else if (table[1][index1] != nullptr && table[1][index1]->val == val) {
-            delete table[1][index1];
-            table[1][index1] = nullptr;
+        } else if (table[1][index1].occupied && table[1][index1].val == val) {
+            table[1][index1].occupied = false; // this means it isn't occupied
             return true;
         }
         return false;
@@ -135,9 +125,9 @@ public:
     bool contains(const T val) {
         int index0 = hashZero(val);
         int index1 = hashOne(val);
-        if (table[0][index0] != nullptr && table[0][index0]->val == val) {
+        if (table[0][index0].occupied && table[0][index0].val == val) {
             return true;
-        } else if (table[1][index1] != nullptr && table[1][index1]->val == val) {
+        } else if (table[1][index1].occupied && table[1][index1].val == val) {
             return true;
         }
         return false;
@@ -147,7 +137,7 @@ public:
         int size = 0;
         for (auto row : table) {
             for (auto entry : row) {
-                if (entry != nullptr) {
+                if (entry.occupied) {
                     size++;
                 }
             }

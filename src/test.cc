@@ -74,22 +74,19 @@ std::vector<Operation> generate_operations(int num_ops, std::vector<int>* entrie
 /**
  * Runs a workload for cuckoo serial
  */
-long long do_work_serial(Sequential<int> *cuckoo_serial, std::vector<Operation> ops) {
+long long sequential_workload(Sequential<int> *cuckoo_serial, std::vector<Operation> ops) {
     // Start doing work
     auto exec_time_start = std::chrono::high_resolution_clock::now();
     for (auto op : ops) {
         switch (op.type) {
-            // Contains
             case 0:
-                cuckoo_serial->contains(op.val);
+                cuckoo_serial->contains(op.val); //contains operation
                 break;
-            // Insert
             case 1:
-                cuckoo_serial->add(op.val);
+                cuckoo_serial->add(op.val); //add operation
                 break;
-            // Remove
             default:
-                cuckoo_serial->remove(op.val);
+                cuckoo_serial->remove(op.val); //remove operation
                 break;
         }
     }
@@ -97,9 +94,7 @@ long long do_work_serial(Sequential<int> *cuckoo_serial, std::vector<Operation> 
     return std::chrono::duration_cast<std::chrono::milliseconds>(exec_time_end - exec_time_start).count();
 }
 
-/**
- * Runs a workload for cuckoo concurrent
- */
+//concurrent
 long long do_work_concurrent(CuckooConcurrentHashSet<int> *cuckoo_concurrent, std::vector<int> concurrent_entries) {
     // Start doing work
     auto exec_time_start = std::chrono::high_resolution_clock::now();
@@ -125,20 +120,16 @@ long long do_work_concurrent(CuckooConcurrentHashSet<int> *cuckoo_concurrent, st
 }
 
 int main(int argc, char *argv[]) {
-    // Serial Cuckoo
-    std::cout << "Starting serial cuckoo..." << std::endl;
     Sequential<int> *cuckoo_serial = new Sequential<int>(CAPACITY);
-    // Setup hash table and pre-generate workload
+    // this will set up a hash table
     auto serial_entries = generate_entries(INITIAL_SIZE);
     if (!cuckoo_serial->populate(serial_entries))
         return 0;
     auto serial_ops = generate_operations(NUM_OPS * NUM_THREADS, &serial_entries);
-    long long serial_exec_time = do_work_serial(cuckoo_serial, serial_ops);
-    std::cout << "Serial time (milliseconds):\t\t" << serial_exec_time << std::endl;
+    long long serial_exec_time = sequential_workload(cuckoo_serial, serial_ops);
+    std::cout << "Sequential time (milliseconds):\t\t" << serial_exec_time << std::endl;
     delete cuckoo_serial;
 
-    // Concurrent Cuckoo
-    std::cout << "Starting concurrent cuckoo..." << std::endl;
     CuckooConcurrentHashSet<int> *cuckoo_concurrent = new CuckooConcurrentHashSet<int>(CAPACITY);
     auto concurrent_entries = generate_entries(INITIAL_SIZE);
     if (!cuckoo_concurrent->populate(concurrent_entries))
@@ -148,7 +139,7 @@ int main(int argc, char *argv[]) {
         total_concurrent_exec_time += do_work_concurrent(cuckoo_concurrent, concurrent_entries);
     }
     long long avg_concurrent_exec_time = total_concurrent_exec_time / NUM_THREADS;
-    std::cout << "Average concurrent exec_time (milliseconds):\t\t" << avg_concurrent_exec_time << std::endl;
+    std::cout << "Concurrent time (miliseconds):\t\t" << avg_concurrent_exec_time << std::endl;
     delete cuckoo_concurrent;
 
     return 0;
